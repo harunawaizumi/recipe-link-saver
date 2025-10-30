@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="description" content="レシピリンクを保存・管理できるWebアプリケーション">
+        <title>Recipe Link Saver</title>
+        <link rel="stylesheet" href="styles.css">
+        <!-- Simple admin interface - no authentication required -->
+    </head>
+
+    <body>
+        <header>
+            <div class="header-content">
+                <div class="header-text">
+                    <h1>Recipe Link Saver</h1>
+                    <p>Never lose a great recipe again – bookmark, rate, and organize all your culinary finds!</p>
+                </div>
+                <!-- Login Section for Simple Auth -->
+                <div id="login-section" class="login-section">
+                    <form id="login-form" class="login-form">
+                        <div class="login-fields">
+                            <input type="text" id="admin-id" placeholder="ID" class="login-input">
+                            <input type="password" id="admin-password" placeholder="Password" class="login-input">
+                            <button type="submit" class="login-btn">Login</button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- User Section for Logged In State -->
+                <div id="user-section" class="user-info" style="display: none;">
+                    <img id="user-avatar" src="" alt="User"
+                        style="width: 32px; height: 32px; border-radius: 50%; display: none;">
+                    <span id="user-name" class="user-name">Admin</span>
+                    <button id="logout-btn" class="logout-btn">Logout</button>
+                </div>
+            </div>
+        </header>
+
+        <main>
+            <!-- Admin Panel (Hidden by default) -->
+            <section id="admin-panel" class="admin-panel" style="display: none;">
+                <h2>レシピ管理</h2>
+
+                <!-- Add Recipe Form -->
+                <div class="admin-section-content">
+                    <h3>レシピを追加</h3>
+                    <form id="recipe-form">
+                        <div class="form-group">
+                            <label for="recipe-url">レシピURL *</label>
+                            <input type="url" id="recipe-url" required placeholder="https://example.com/recipe">
+                            <small>レシピのURLを入力してください</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="recipe-title">タイトル</label>
+                            <input type="text" id="recipe-title" placeholder="レシピのタイトル（自動取得されます）">
+                            <small>空欄の場合、URLから自動で取得されます</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="recipe-memo">メモ</label>
+                            <textarea id="recipe-memo" rows="3" placeholder="メモや感想"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <fieldset class="rating-input">
+                                <legend>評価</legend>
+                                <div class="rating-options">
+                                    <input type="radio" name="rating" value="1" id="rating-1" checked>
+                                    <label for="rating-1">未定</label>
+
+                                    <input type="radio" name="rating" value="2" id="rating-2">
+                                    <label for="rating-2">微妙</label>
+
+                                    <input type="radio" name="rating" value="3" id="rating-3">
+                                    <label for="rating-3">まあまあ</label>
+
+                                    <input type="radio" name="rating" value="4" id="rating-4">
+                                    <label for="rating-4">満足</label>
+
+                                    <input type="radio" name="rating" value="5" id="rating-5">
+                                    <label for="rating-5">絶対リピ！</label>
+                                </div>
+                            </fieldset>
+                        </div>
+                        <button type="submit" class="btn-primary">レシピを保存</button>
+                    </form>
+                </div>
+            </section>
+
+            <section class="recipe-list">
+                <h2>保存されたレシピ</h2>
+
+                <!-- 検索・ソート機能 -->
+                <div class="recipe-controls">
+                    <div class="search-container">
+                        <input type="text" id="recipe-search" placeholder="レシピを検索..." class="search-input">
+                        <button type="button" id="clear-search" class="clear-search-btn" title="検索をクリア">×</button>
+                    </div>
+
+                    <div class="sort-container">
+                        <label for="recipe-sort">並び順:</label>
+                        <select id="recipe-sort" class="sort-select">
+                            <option value="date-desc">追加日（新しい順）</option>
+                            <option value="date-asc">追加日（古い順）</option>
+                            <option value="title-asc">タイトル（A-Z）</option>
+                            <option value="title-desc">タイトル（Z-A）</option>
+                            <option value="rating-desc">評価（高い順）</option>
+                            <option value="rating-asc">評価（低い順）</option>
+                            <option value="domain-asc">ドメイン（A-Z）</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="recipes-container" class="recipes-list">
+                    <!-- レシピカードがここに動的に追加されます -->
+                </div>
+                <div id="empty-state" class="empty-state" style="display: none;">
+                    <p>保存されたレシピがありません</p>
+                    <p>右上の「Admin」ボタンからレシピを追加してみましょう！</p>
+                </div>
+                <div id="no-results" class="empty-state" style="display: none;">
+                    <p>検索条件に一致するレシピが見つかりません</p>
+                    <p>検索キーワードを変更してみてください</p>
+                </div>
+            </section>
+        </main>
+
+        <div id="message" class="message" role="alert" aria-live="polite"></div>
+
+        <footer>
+            <p>&copy; 2024 Recipe Link Saver</p>
+        </footer>
+
+        <script src="integrated-app.js"></script>
+    </body>
+
+</html>
