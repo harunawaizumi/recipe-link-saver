@@ -22,7 +22,7 @@ class SimpleAuthAPI {
     async login(id, password) {
         try {
             // Use the real backend authentication endpoint
-            const response = await fetch('/api/auth/admin', {
+            const response = await fetch('https://p89aqlqn01.execute-api.ap-northeast-1.amazonaws.com/prod/auth/admin', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -81,7 +81,7 @@ class SimpleAuthAPI {
         try {
             // For now, we'll do a simple check by making an API call
             // In a real implementation, you might have a dedicated verify endpoint
-            const response = await fetch('/api/recipes', {
+            const response = await fetch('https://p89aqlqn01.execute-api.ap-northeast-1.amazonaws.com/prod/recipes', {
                 method: 'GET',
                 headers: {
                     'Authorization': `Bearer ${this.token}`
@@ -120,7 +120,7 @@ class SimpleAuthAPI {
  */
 class RecipeAPI {
     constructor(authAPI = null) {
-        this.baseURL = '/api/recipes';
+        this.baseURL = 'https://p89aqlqn01.execute-api.ap-northeast-1.amazonaws.com/prod/recipes';
         this.timeout = 10000; // 10秒のタイムアウト
         this.authAPI = authAPI;
     }
@@ -330,22 +330,191 @@ class RecipeAPI {
     async extractMetadata(url) {
         try {
             if (!url || !URLValidator.isValidURL(url)) {
-                throw new Error('有効なURLが必要です');
-            }
-
-            const encodedUrl = encodeURIComponent(url);
-            const response = await this.makeRequest('GET', `${this.baseURL}/extract-meta?url=${encodedUrl}`);
-
-            if (response.success && response.data) {
-                return response.data.metadata;
-            } else {
-                console.warn('メタデータの抽出に失敗しました:', response.message);
                 return null;
             }
 
+            // First, check if this URL already exists in our database
+            try {
+                const existingRecipes = await this.getRecipes();
+                const existingRecipe = existingRecipes.find(recipe => recipe.url === url);
+
+                if (existingRecipe) {
+                    // Return the existing recipe's metadata
+                    return {
+                        title: existingRecipe.title,
+                        domain: existingRecipe.domain,
+                        description: existingRecipe.memo ? `メモ: ${existingRecipe.memo}` : `既存のレシピ (評価: ${this.getRatingLabel(existingRecipe.rating)})`,
+                        image: existingRecipe.imageUrl,
+                        isExisting: true
+                    };
+                }
+            } catch (dbError) {
+                console.warn('既存レシピの確認に失敗しました:', dbError);
+                // Continue with fallback metadata extraction
+            }
+
+            // Try to extract real metadata using a CORS proxy
+            try {
+                const metadata = await this.fetchRealMetadata(url);
+                if (metadata) {
+                    return metadata;
+                }
+            } catch (metaError) {
+                console.warn('リアルメタデータの取得に失敗しました:', metaError);
+                // Fall back to basic extraction
+            }
+
+            // Fallback: Extract basic information from the URL
+            const urlObj = new URL(url);
+            const domain = urlObj.hostname;
+
+            // Generate a basic title from the URL
+            let title = '';
+            let description = '';
+
+            // Extract title from common recipe site patterns
+            if (domain.includes('cookpad.com')) {
+                title = 'Cookpad レシピ';
+                description = 'Cookpadからのレシピです。保存後に正確なタイトルが表示されます。';
+            } else if (domain.includes('kurashiru.com')) {
+                title = 'クラシル レシピ';
+                description = 'クラシルからのレシピです。保存後に正確なタイトルが表示されます。';
+            } else if (domain.includes('delishkitchen.tv')) {
+                title = 'DELISH KITCHEN レシピ';
+                description = 'DELISH KITCHENからのレシピです。保存後に正確なタイトルが表示されます。';
+            } else if (domain.includes('recipe.rakuten.co.jp')) {
+                title = '楽天レシピ';
+                description = '楽天レシピからのレシピです。保存後に正確なタイトルが表示されます。';
+            } else if (domain.includes('kyounoryouri.jp')) {
+                title = 'きょうの料理 レシピ';
+                description = 'きょうの料理からのレシピです。保存後に正確なタイトルが表示されます。';
+            } else {
+                // Generate title from domain
+                title = domain.replace('www.', '') + ' のレシピ';
+                description = `${domain} からのレシピです。保存後に正確なタイトルが表示されます。`;
+            }
+
+            return {
+                title: title,
+                domain: domain,
+                description: description,
+                image: null,
+                isExisting: false
+            };
+
         } catch (error) {
-            console.error('メタデータの抽出に失敗しました:', error);
+            console.warn('メタデータの抽出をスキップします:', error.message);
             return null;
+        }
+    }
+
+    /**
+     * 評価の数値をラベルに変換する
+     */
+    getRatingLabel(rating) {
+        const ratingLabels = {
+            1: '未定',
+            2: '微妙',
+            3: 'まあまあ',
+            4: '満足',
+            5: '絶対リピ！'
+        };
+        return ratingLabels[rating] || '未定';
+    }
+
+    /**
+     * 実際のメタデータを取得する（CORS プロキシ使用）
+     */
+    async fetchRealMetadata(url) {
+        try {
+            // Use a public CORS proxy to fetch the page content
+            const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
+
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
+
+            const response = await fetch(proxyUrl, {
+                method: 'GET',
+                signal: controller.signal
+            });
+
+            clearTimeout(timeoutId);
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+
+            const data = await response.json();
+            const htmlContent = data.contents;
+
+            if (!htmlContent) {
+                throw new Error('No content received');
+            }
+
+            // Parse the HTML to extract metadata
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(htmlContent, 'text/html');
+
+            // Extract title
+            let title = '';
+
+            // Try Open Graph title first
+            const ogTitle = doc.querySelector('meta[property="og:title"]');
+            if (ogTitle) {
+                title = ogTitle.getAttribute('content');
+            }
+
+            // Fall back to regular title tag
+            if (!title) {
+                const titleTag = doc.querySelector('title');
+                if (titleTag) {
+                    title = titleTag.textContent;
+                }
+            }
+
+            // Extract image
+            let image = null;
+            const ogImage = doc.querySelector('meta[property="og:image"]');
+            if (ogImage) {
+                image = ogImage.getAttribute('content');
+                // Make sure image URL is absolute
+                if (image && !image.startsWith('http')) {
+                    const urlObj = new URL(url);
+                    if (image.startsWith('/')) {
+                        image = `${urlObj.protocol}//${urlObj.host}${image}`;
+                    } else {
+                        image = `${urlObj.protocol}//${urlObj.host}/${image}`;
+                    }
+                }
+            }
+
+            // Extract description
+            let description = '';
+            const ogDescription = doc.querySelector('meta[property="og:description"]');
+            if (ogDescription) {
+                description = ogDescription.getAttribute('content');
+            }
+
+            if (!description) {
+                const metaDescription = doc.querySelector('meta[name="description"]');
+                if (metaDescription) {
+                    description = metaDescription.getAttribute('content');
+                }
+            }
+
+            const urlObj = new URL(url);
+
+            return {
+                title: title || `${urlObj.hostname} のレシピ`,
+                domain: urlObj.hostname,
+                description: description || `${urlObj.hostname} からのレシピ`,
+                image: image,
+                isExisting: false
+            };
+
+        } catch (error) {
+            console.warn('CORS プロキシでのメタデータ取得に失敗:', error);
+            throw error;
         }
     }
 
@@ -1168,6 +1337,7 @@ class SimpleAuthManager {
 
         const id = idInput.value.trim();
         const password = passwordInput.value.trim();
+        console.log(id, password);
 
         try {
             const result = await this.authAPI.login(id, password);
@@ -1316,6 +1486,9 @@ class RecipeLinkSaver {
             // Always bind UI events for public viewing (search, sort, etc.)
             this.ui.bindEvents();
 
+            // Always bind URL preview events (works without authentication)
+            this.bindUrlPreviewEvents();
+
         } catch (error) {
             console.error('認証状態変更の処理に失敗しました:', error);
             this.ui.showMessage('エラーが発生しました。ページを再読み込みしてください。', 'error', 0);
@@ -1395,9 +1568,6 @@ class RecipeLinkSaver {
             event.preventDefault();
             this.handleFormSubmit();
         });
-
-        // Add URL preview functionality
-        this.bindUrlPreviewEvents();
     }
 
     /**
@@ -1462,11 +1632,11 @@ class RecipeLinkSaver {
                     }, 2000);
                 }
             } else {
-                this.showUrlPreviewError('メタデータを取得できませんでした');
+                this.removeUrlPreview();
             }
         } catch (error) {
             console.warn('URL プレビューの取得に失敗しました:', error);
-            this.showUrlPreviewError('プレビューの取得に失敗しました');
+            this.removeUrlPreview();
         }
     }
 
@@ -1508,15 +1678,22 @@ class RecipeLinkSaver {
             ? `<img src="${this.ui.escapeHtml(metadata.image)}" alt="Preview" class="url-preview-image" onerror="this.style.display='none'">`
             : '<div class="url-preview-no-image">🍽️</div>';
 
+        // Add special styling for existing recipes
+        const existingClass = metadata.isExisting ? ' existing-recipe' : '';
+        const existingBadge = metadata.isExisting ? '<span class="existing-badge">既存のレシピ</span>' : '';
+
         previewContainer.innerHTML = `
-            <div class="url-preview">
+            <div class="url-preview${existingClass}">
                 <div class="url-preview-image-container">
                     ${imageHtml}
                 </div>
                 <div class="url-preview-content">
-                    <h4 class="url-preview-title">${this.ui.escapeHtml(metadata.title || 'タイトルなし')}</h4>
+                    <div class="url-preview-header">
+                        <h4 class="url-preview-title">${this.ui.escapeHtml(metadata.title || 'タイトルなし')}</h4>
+                        ${existingBadge}
+                    </div>
                     <p class="url-preview-domain">${this.ui.escapeHtml(metadata.domain)}</p>
-                    ${metadata.description ? `<p class="url-preview-description">${this.ui.escapeHtml(metadata.description.substring(0, 100))}...</p>` : ''}
+                    ${metadata.description ? `<p class="url-preview-description">${this.ui.escapeHtml(metadata.description.length > 100 ? metadata.description.substring(0, 100) + '...' : metadata.description)}</p>` : ''}
                 </div>
                 <button type="button" class="url-preview-close" onclick="this.parentElement.parentElement.remove()">×</button>
             </div>
@@ -1613,7 +1790,7 @@ class RecipeLinkSaver {
             let imageUrl = null;
 
             try {
-                this.ui.showMessage('画像とタイトルを取得中...', 'info', 0);
+                // Try to extract metadata silently (don't show loading message)
                 const metadata = await this.api.extractMetadata(formData.url);
 
                 if (metadata) {
