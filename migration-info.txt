@@ -5,8 +5,8 @@ Stack Name: recipe-link-saver-api-1762051957
 Existing Database: database-1.cbusiyqaqblm.ap-northeast-1.rds.amazonaws.com
 Database Name: recipe_link_saver
 API URL: https://p89aqlqn01.execute-api.ap-northeast-1.amazonaws.com/prod/
-Website URL: http://recipe-link-saver-frontend.s3-website-us-east-1.amazonaws.com
-S3 Bucket: recipe-link-saver-frontend
+Website URL: http://www.recipe-link-saver.harunawaizumi.space.s3-website-ap-northeast-1.amazonaws.com
+S3 Bucket: www.recipe-link-saver.harunawaizumi.space
 
 Login Credentials:
 Username: admin
@@ -14,4 +14,4 @@ Password: password123
 
 Cleanup Command (keeps database):
 aws cloudformation delete-stack --stack-name recipe-link-saver-api-1762051957
-aws s3 rb s3://recipe-link-saver-frontend --force
+aws s3 rb s3://www.recipe-link-saver.harunawaizumi.space --force

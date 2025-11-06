@@ -4,7 +4,7 @@
 echo "🗾 Fixing frontend API URL for Tokyo region..."
 
 REGION="ap-northeast-1"
-BUCKET_NAME="recipe-link-saver-frontend"
+BUCKET_NAME="www.recipe-link-saver.harunawaizumi.space"
 
 # Step 1: Get Tokyo API Gateway URL
 echo "🔍 Step 1: Getting Tokyo API Gateway URL..."
